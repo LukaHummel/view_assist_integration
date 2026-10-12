@@ -4,10 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import pytest
+from homeassistant.core import Event, State
+
 from custom_components.view_assist.devices.entity_listeners import (
     EntityStateChangedHandler,
 )
-from homeassistant.core import Event, State
 
 MODULE = "custom_components.view_assist.devices.entity_listeners"
 CARD = {"title": "Recipe", "content": "First prepare the ingredients. Then cook."}
