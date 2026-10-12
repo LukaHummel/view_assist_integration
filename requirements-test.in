@@ -1,0 +1,16 @@
+# Home Assistant's versioned constraints also pin optional integration imports.
+-c https://raw.githubusercontent.com/home-assistant/core/9942caba481e51760915abb788620bf25e492104/homeassistant/package_constraints.txt
+homeassistant @ https://github.com/home-assistant/core/archive/9942caba481e51760915abb788620bf25e492104.tar.gz
+# Optional Core components imported by the integration's callback modules.
+gazetteer-matcher
+ha-ffmpeg
+hassil
+home-assistant-intents
+mutagen
+pymicro-vad
+pyspeex-noise
+wordtodigits==1.0.2
+beautifulsoup4==4.15.0
+voluptuous==0.15.2
+pytest==9.0.3
+ruff==0.16.10
