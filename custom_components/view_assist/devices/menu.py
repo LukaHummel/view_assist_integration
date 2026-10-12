@@ -13,8 +13,8 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.const import ATTR_ENTITY_ID
-from homeassistant.core import HomeAssistant, ServiceCall, callback
+from homeassistant.const import ATTR_ENTITY_ID, EVENT_LOVELACE_UPDATED
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -80,6 +80,7 @@ class MenuManager:
         self._internal_status_icons: list[str] = []
         self._internal_menu_items: list[str] = []
         self._menu_timeout: int = 10
+        self._view_icons: dict[str, dict[str, str]] = {}
 
         # NEW: Explicit tracking of runtime additions
         self._runtime_status_icons: list[str] = []
@@ -135,6 +136,12 @@ class MenuManager:
                 self._internal_menu_items.append(item)
 
         self._menu_timeout = d.menu_timeout
+        await self._async_update_view_icons()
+        self.config.async_on_unload(
+            self.hass.bus.async_listen(
+                EVENT_LOVELACE_UPDATED, self._async_dashboard_changed
+            )
+        )
         self._build()
 
         return True
@@ -175,6 +182,13 @@ class MenuManager:
             self._add_remove_menu_item(
                 item, True
             ) if menu else self._add_remove_status_item(item, True)
+
+        if menu and self._menu_dashboard_paths() - self._view_icons.keys():
+            self.config.async_create_background_task(
+                self.hass,
+                self._async_refresh_menu_icons(),
+                name=f"refresh_menu_icons-{self.name}",
+            )
 
         # Handle item timeout for auto-remove
         if timeout:
@@ -252,7 +266,7 @@ class MenuManager:
         # Filter icons that are also in status icons from menu items
         # Menu items should be in reverse order of added to show right to left
         self.menu_items = [
-            item
+            self._resolve_menu_icon(item)
             for item in self._internal_menu_items[::-1]
             if item not in self.status_icons
         ]
@@ -267,6 +281,73 @@ class MenuManager:
         else:
             # Update sensor attributes via dispatcher
             self._notify_update()
+
+    def _menu_view_target(self, item: str) -> str | None:
+        """Return a view target for an item without an explicit icon override."""
+        if "|" in item or not item.startswith("view:"):
+            return None
+        return item.removeprefix("view:")
+
+    def _menu_view_path(self, target: str) -> tuple[str, str]:
+        """Resolve a relative view name against the device's dashboard."""
+        if not target.startswith("/"):
+            dashboard = self.config.runtime_data.dashboard.dashboard or "/view-assist"
+            target = f"{dashboard.rstrip('/')}/{target}"
+        dashboard, _, view = target.lstrip("/").partition("/")
+        return dashboard, view
+
+    def _menu_dashboard_paths(self) -> set[str]:
+        """Return dashboards referenced by menu items using default icons."""
+        return {
+            self._menu_view_path(target)[0]
+            for item in self._internal_menu_items
+            if (target := self._menu_view_target(item))
+        }
+
+    async def _async_update_view_icons(self) -> None:
+        """Read view icons from the configured Home Assistant dashboards."""
+        lovelace = self.hass.data.get("lovelace")
+        for url_path in self._menu_dashboard_paths():
+            icons = {}
+            dashboard = lovelace.dashboards.get(url_path) if lovelace else None
+            if dashboard is None and lovelace and url_path == "lovelace":
+                dashboard = lovelace.dashboards.get(None)
+            if dashboard:
+                try:
+                    dashboard_config = await dashboard.async_load(False)
+                except Exception as ex:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "Unable to load menu view icons for %s: %s", url_path, ex
+                    )
+                else:
+                    for index, view in enumerate(dashboard_config.get("views", [])):
+                        icon = view.get("icon")
+                        # The dashboard's dynamic_view_item template adds mdi: itself.
+                        if isinstance(icon, str) and icon.startswith("mdi:"):
+                            icons[str(index)] = icon.removeprefix("mdi:")
+                            if "path" in view:
+                                icons[str(view["path"])] = icon.removeprefix("mdi:")
+            self._view_icons[url_path] = icons
+
+    async def _async_refresh_menu_icons(self) -> None:
+        """Refresh inherited icons and notify connected displays."""
+        await self._async_update_view_icons()
+        self._build()
+
+    async def _async_dashboard_changed(self, event: Event) -> None:
+        """Rebuild defaults when a referenced dashboard is edited."""
+        url_path = event.data.get("url_path") or "lovelace"
+        if url_path in self._menu_dashboard_paths():
+            await self._async_refresh_menu_icons()
+
+    def _resolve_menu_icon(self, item: str) -> str:
+        """Use a view's icon by default, preserving existing overrides and fallbacks."""
+        if target := self._menu_view_target(item):
+            dashboard, view = self._menu_view_path(target)
+            if icon := self._view_icons.get(dashboard, {}).get(view):
+                return f"view:{target}|{icon}"
+        return item
+
     def _notify_update(self) -> None:
         """Notify that an update has occurred."""
 

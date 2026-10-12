@@ -337,7 +337,7 @@ add_status_item:
             - sensor
     status_item:
       name: "Status Item(s)"
-      description: "The status item(s) to add. Can be a single item or a list of items. Each item can be a system item name like 'weather' or a custom action format like 'view:weather|cloud'"
+      description: "The status item(s) to add. Can be a single item or a list of items. View menu items require the 'view:' type prefix: 'view:weather' inherits the dashboard view's icon. Use 'view:weather|cloud' to override the icon, or another existing custom action format."
       required: true
       selector:
         object:

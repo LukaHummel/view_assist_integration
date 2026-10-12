@@ -37,6 +37,18 @@ Questions, problems, concerns?  Reach out to us on Discord or use the 'Issues' a
 
 We strongly suggest Android users use our [View Assist Companion App](https://github.com/msp1974/ViewAssist_Companion_App) in conjunction with the View Assist Integration.  This app greatly simplifies the process of get things goiung.  Follow the link for more information.
 
+## Menu icons
+
+Menu items inherit the icon configured on the corresponding Home Assistant dashboard
+view. Use the `view:` type prefix, such as `view:weather`; views on another
+dashboard can use `view:/other-dashboard/weather`. Changing the view's icon also
+updates the menu icon.
+
+The existing override syntax still works: `view:weather|cloud` uses `mdi:cloud`
+instead of the view icon. Existing templates and entity or service actions remain
+available, and items without a view icon keep their existing fallback. Inherited
+icons use the dashboard renderer's supported `mdi:` icons.
+
 # Help
 
 Need help?  Check our [View Assist Wiki](https://dinki.github.io/View-Assist/) for the most up-to-date documentation.  You can also hop on our [View Assist Discord Server](https://discord.gg/3WXXfGAf8T) and we'll give you a boost!

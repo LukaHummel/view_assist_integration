@@ -134,7 +134,7 @@
               "status_icons_size": "Size of the icons in the status icon display",
               "status_icons": "Advanced option! List of custom launch icons to set on start up. Do not change this if you do not know what you are doing",
               "menu_config": "Configure the menu behavior",
-              "menu_items": "List of items to show in the menu when activated",
+              "menu_items": "List of items to show in the menu when activated. Use the view: type prefix, such as view:weather, to inherit a dashboard view's icon, or view:weather|cloud to override it",
               "menu_timeout": "Time in seconds before menu automatically closes (0 to disable timeout)",
               "time_format": "Sets clock display time format",
               "screen_mode": "Show or hide the header and sidebar",
