@@ -435,7 +435,9 @@ class SensorAttributeChangedHandler:
         elif new_mode == VAMode.CYCLE:
             # Start cycling views
             if self.navigation_manager:
-                cycle_views = self.config.runtime_data.dashboard.display_settings.cycle_views
+                cycle_views = (
+                    self.config.runtime_data.dashboard.display_settings.cycle_views
+                )
                 self.navigation_manager.start_display_view_cycle(cycle_views)
 
         elif new_mode == VAMode.HOLD:
@@ -606,12 +608,24 @@ class EntityStateChangedHandler:
         self, event: Event[EventStateChangedData]
     ) -> None:
         """Handle intent device state changes."""
-        if not self._validate_event(event):
+        if not event.data.get("new_state"):
             return
 
         new_state: State = event.data["new_state"]
+        old_state: State | None = event.data.get("old_state")
+        if (
+            old_state
+            and old_state.state == new_state.state
+            and old_state.attributes.get("intent_output")
+            == new_state.attributes.get("intent_output")
+            and old_state.attributes.get("processed_locally")
+            == new_state.attributes.get("processed_locally")
+        ):
+            return
         if intent_output := new_state.attributes.get("intent_output"):
             speech_text = get_key("response.speech.plain.speech", intent_output)
+            if not isinstance(speech_text, str):
+                speech_text = ""
             _LOGGER.debug("Intent output received: %s", speech_text)
             # Set updates to apply to sensor entity
             updates = {}
@@ -663,6 +677,7 @@ class EntityStateChangedHandler:
                         navigation_manager.browser_navigate(
                             self.config.runtime_data.dashboard.intent
                         )
+                    return
                 elif todos:
                     _LOGGER.debug("Todo lists affected: %s", todos)
                     updates["list"] = todos[0]  # Just use the first todo list
@@ -671,25 +686,61 @@ class EntityStateChangedHandler:
                         navigation_manager.browser_navigate(
                             self.config.runtime_data.dashboard.list_view
                         )
+                    return
             # Checks if AI response or if no speech is returned
-            elif not processed_locally and speech_text != "*":
+            if simple_card := get_key("response.card.simple", intent_output):
+                if (
+                    isinstance(simple_card, dict)
+                    and isinstance(simple_card.get("title"), str)
+                    and isinstance(simple_card.get("content"), str)
+                    and simple_card["content"].strip()
+                ):
+                    self._display_info(
+                        updates,
+                        simple_card["title"],
+                        simple_card["content"],
+                        navigation_manager,
+                    )
+                elif (
+                    not changed_entities
+                    and not processed_locally
+                    and speech_text
+                    and speech_text != "*"
+                ):
+                    self._display_info(
+                        updates, "AI Response", speech_text, navigation_manager
+                    )
+                else:
+                    self._update_sensor_entity(updates)
+            elif (
+                not changed_entities
+                and not processed_locally
+                and speech_text
+                and speech_text != "*"
+            ):
                 _LOGGER.debug("No entities or todo lists affected")
-                word_count = len(speech_text.split())
-                message_font_size = ["10vw", "8vw", "6vw", "4vw"][
-                    min(word_count // 6, 3)
-                ]
-                # Navigate first to trigger title clear
-                if navigation_manager:
-                    navigation_manager.browser_navigate("view-assist/info")
-                # Then set the title/message after navigation to prevent clearing
-                updates.update(
-                    {
-                        "title": "AI Response",
-                        "message_font_size": message_font_size,
-                        "message": speech_text,
-                    }
+                self._display_info(
+                    updates, "AI Response", speech_text, navigation_manager
                 )
+            else:
                 self._update_sensor_entity(updates)
+
+    def _display_info(
+        self,
+        updates: dict,
+        title: str,
+        message: str,
+        navigation_manager: NavigationManager | None,
+    ) -> None:
+        """Show display text after navigation has cleared the previous title."""
+        word_count = len(message.split())
+        message_font_size = ["10vw", "8vw", "6vw", "4vw"][min(word_count // 6, 3)]
+        if navigation_manager:
+            navigation_manager.browser_navigate("view-assist/info")
+        updates.update(
+            {"title": title, "message_font_size": message_font_size, "message": message}
+        )
+        self._update_sensor_entity(updates)
 
     @callback
     def _async_cc_on_conversation_ended_handler(self, event: Event):
